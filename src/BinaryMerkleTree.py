@@ -20,6 +20,7 @@ class MerkleTreeNode:
     def __init__(self, hash: str=None, left=None, right=None) -> None:
         self.left = left
         self.right = right
+        self.parent = None
 
         if left is not None and right is not None and hash is None:
             self.hash = get_hash(left.hash + right.hash)
@@ -27,7 +28,6 @@ class MerkleTreeNode:
             self.hash = hash
         else:
             raise ValueError("value error")
-        
     
     def __copy__(self):
         return MerkleTreeNode(hash=self.hash, left=self.left, right=self.right)
@@ -55,7 +55,9 @@ class MerkleTree:
         if len(hashes) == 0:
             return
 
-        nodes = [MerkleTreeNode(hash=hash) for hash in hashes]
+        self.hashes = hashes
+        self.leafs = [MerkleTreeNode(hash=hash) for hash in hashes]
+        nodes = self.leafs
         ensure_even_list(nodes)
 
         while len(nodes) > 1:
@@ -63,7 +65,9 @@ class MerkleTree:
             
             ensure_even_list(nodes)
             for i in range(0, len(nodes), 2):
-                parent_nodes.append(MerkleTreeNode(left=nodes[i], right=nodes[i+1]))
+                parent_nodes.append(MerkleTreeNode(left=nodes[i], right=nodes[i + 1]))
+                nodes[i].parent = parent_nodes[-1]
+                nodes[i + 1].parent = parent_nodes[-1]
             
             nodes = parent_nodes
         
@@ -73,29 +77,22 @@ class MerkleTree:
         return self.root.__str__()
 
 
-def generate_MerkleTree_proof(hash: str, hashes:list[str], tree: MerkleTree):
-    if len(hashes) == 0:
-        return
+    def generate_proof(self, hash: str):
+        if len(self.hashes) == 0:
+            return
 
-    proof = []
+        leaf_id = self.hashes.index(hash)
+        node = self.leafs[leaf_id]
+        proof = []
+        while node.parent is not None:
+            if node.hash == node.parent.left.hash:
+                proof.append((node.parent.right.hash, RIGHT))
+            else:
+                proof.append((node.parent.left.hash, LEFT))
 
-    while len(hashes) > 1:
-        parent_hashes = []
-        
-        for i in range(0, len(hashes), 2):
-            ensure_even_list(hashes)
-            parent_hashes.append(get_hash(hashes[i] + hashes[i + 1]))
-            
-            if hash == hashes[i]:
-                proof.append((hashes[i + 1], RIGHT))
-                hash = parent_hashes[-1]
-            elif hash == hashes[i + 1]:
-                proof.append((hashes[i], LEFT))
-                hash = parent_hashes[-1]
+            node = node.parent
 
-        hashes = parent_hashes
-    
-    return proof
+        return proof
 
 
 def check_proof(hash: str, proof: list[tuple[str, str]], root_hash: str):
@@ -120,8 +117,8 @@ def main():
     # print(f"root hash = {tree.root.hash}")
 
     hash = hashes[5777]
-    proof = generate_MerkleTree_proof(hash=hash, hashes=hashes, tree=tree)
-    # for step in proof1: print(step)
+    proof = tree.generate_proof(hash=hash)
+    # for step in proof: print(step)
     
     print("inclusion success:", check_proof(hash=hash, proof=proof, root_hash=tree.root.hash))
     print("inclusion fail:", check_proof(hash=get_hash(data="ghtjd"), proof=proof, root_hash=tree.root.hash))
